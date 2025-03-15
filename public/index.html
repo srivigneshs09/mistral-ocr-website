@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="bg-white shadow-lg rounded-lg p-6 w-full max-w-2xl">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">OCR Tool</h1>
+        
+        <!-- File Upload Form -->
+        <form id="uploadForm" enctype="multipart/form-data" class="space-y-4">
+            <input type="file" name="file" accept=".png,.jpg,.jpeg,.pdf" 
+                   class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 
+                   file:rounded-full file:border-0 file:text-sm file:font-semibold 
+                   file:bg-green-50 file:text-green-700 hover:file:bg-green-100">
+            <button type="submit" id="submitBtn" 
+                    class="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 
+                    disabled:bg-gray-400 disabled:cursor-not-allowed">
+                Extract Text
+            </button>
+        </form>
+
+        <!-- Loading Spinner -->
+        <div id="loading" class="hidden flex justify-center mt-4">
+            <svg class="animate-spin h-8 w-8 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8h8a8 8 0 01-8 8 8 8 0 01-8-8z"></path>
+            </svg>
+        </div>
+
+        <!-- Results -->
+        <div id="results" class="hidden mt-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-2">Extracted Text:</h2>
+            <textarea id="extractedText" readonly 
+                      class="w-full h-64 p-4 bg-gray-50 border border-gray-300 rounded-lg text-gray-800 
+                      focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+            <div class="mt-4 flex space-x-4">
+                <button id="copyBtn" 
+                        class="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700">
+                    Copy to Clipboard
+                </button>
+                <form id="downloadForm" method="POST" action="/api/download" class="inline">
+                    <input type="hidden" name="text" id="downloadText">
+                    <button type="submit" 
+                            class="bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700">
+                        Download as Text
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="messages" class="mt-4 text-red-600"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById("uploadForm");
+        const submitBtn = document.getElementById("submitBtn");
+        const loading = document.getElementById("loading");
+        const results = document.getElementById("results");
+        const extractedText = document.getElementById("extractedText");
+        const copyBtn = document.getElementById("copyBtn");
+        const downloadForm = document.getElementById("downloadForm");
+        const downloadText = document.getElementById("downloadText");
+        const messages = document.getElementById("messages");
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            submitBtn.disabled = true;
+            loading.classList.remove("hidden");
+            results.classList.add("hidden");
+            messages.innerHTML = "";
+
+            const formData = new FormData(form);
+            try {
+                const response = await fetch("/api/ocr", {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    extractedText.value = data.text;
+                    downloadText.value = data.text;
+                    results.classList.remove("hidden");
+                    if (data.warning) {
+                        messages.innerHTML += `<p>${data.warning}</p>`;
+                        if (data.debug) console.log("Debug:", data.debug);
+                    }
+                } else {
+                    messages.innerHTML = `<p>Error: ${data.error}</p>`;
+                }
+            } catch (err) {
+                messages.innerHTML = `<p>Error: ${err.message}</p>`;
+            } finally {
+                submitBtn.disabled = false;
+                loading.classList.add("hidden");
+            }
+        });
+
+        copyBtn.addEventListener("click", () => {
+            extractedText.select();
+            document.execCommand("copy");
+            alert("Text copied to clipboard!");
+        });
+    </script>
+</body>
+</html>
