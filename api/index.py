@@ -5,24 +5,22 @@ from flask import Flask, request, jsonify, Response
 from mistralai import Mistral
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 
-# Initialize Flask app
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "pdf"}
+MAX_FILE_SIZE = 4 * 1024 * 1024  # 4 MB limit for Vercel free tier
 
-# Initialize Mistral client
 client = Mistral(api_key=MISTRAL_API_KEY)
 
-# Check if file extension is allowed
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Encode file to base64 for OCR
 def encode_file(file_content, file_ext):
+    if len(file_content) > MAX_FILE_SIZE:
+        raise ValueError(f"File size ({len(file_content)} bytes) exceeds 4 MB limit.")
     base64_content = base64.b64encode(file_content).decode("utf-8")
     if file_ext in {"png", "jpg", "jpeg"}:
         return f"data:image/{file_ext};base64,{base64_content}"
@@ -30,14 +28,13 @@ def encode_file(file_content, file_ext):
         return f"data:application/pdf;base64,{base64_content}"
     return None
 
-# Clean extracted text
 def clean_text(text):
-    text = re.sub(r"<[^>]+>", "", text)  # Remove HTML tags
-    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)  # Remove Markdown images
-    text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)  # Remove headers
-    text = re.sub(r"[\*]{1,2}|_{1,2}", "", text)  # Remove bold/italic
-    text = re.sub(r"\s*/\s*", " ", text)  # Remove slashes
-    text = re.sub(r"\s+", " ", text).strip()  # Normalize whitespace
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+    text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"[\*]{1,2}|_{1,2}", "", text)
+    text = re.sub(r"\s*/\s*", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 @app.route("/api/ocr", methods=["POST"])
@@ -55,10 +52,15 @@ def ocr():
         file_ext = file.filename.rsplit(".", 1)[1].lower()
         is_image = file_ext in {"png", "jpg", "jpeg"}
 
+        # Check file size
+        if len(file_content) > MAX_FILE_SIZE:
+            return jsonify({"error": f"File size ({len(file_content)} bytes) exceeds 4 MB limit. Please upload a smaller file."}), 400
+
         data_url = encode_file(file_content, file_ext)
         if not data_url:
             return jsonify({"error": "Failed to encode file"}), 500
 
+        # Process OCR
         ocr_response = client.ocr.process(
             model="mistral-ocr-latest",
             document={
@@ -88,6 +90,8 @@ def ocr():
                 "debug": str(ocr_response)
             })
 
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
         return jsonify({"error": f"Error processing file: {str(e)}"}), 500
 
