@@ -89,7 +89,6 @@ def ocr():
                 "text": "No text extracted",
                 "debug": str(ocr_response)
             })
-
     except ValueError as ve:
         return jsonify({"error": str(ve)}), 400
     except Exception as e:
